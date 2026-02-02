@@ -3,10 +3,16 @@ import pandas as pd
 from github import Github
 import io
 
-# Configurações de Segurança (Pegas dos Secrets)
-TOKEN = st.secrets["github_token"]
-REPO_NAME = st.secrets["repo_name"]
-FILE_NAME = "estoque.xlsx"
+# Tenta pegar as chaves de segurança
+try:
+    TOKEN = st.secrets["github_token"]
+    REPO_NAME = st.secrets["repo_name"]
+    FILE_NAME = "estoque.xlsx"
+    g = Github(TOKEN)
+    repo = g.get_repo(REPO_NAME)
+except Exception as e:
+    st.error(f"Erro de Configuração: Verifique os 'Secrets' no Streamlit. {e}")
+    st.stop()
 
 st.set_page_config(page_title="Sistema de Estoque", page_icon="🚗")
 
@@ -15,29 +21,25 @@ st.markdown("""<style>.stApp { background-color: #2b59b4; color: white; } .stBut
 
 st.title("🚗 Consulta de Estoque")
 
-# Função para conectar ao GitHub
-g = Github(TOKEN)
-repo = g.get_repo(REPO_NAME)
-
-# --- PARTE 1: UPLOAD E SALVAMENTO ---
-with st.expander("⬆️ ATUALIZAR PLANILHA (SÓ QUANDO MUDAR O ESTOQUE)"):
-    new_file = st.file_uploader("Suba o novo Excel para salvar no sistema", type=["xlsx"])
+# --- AREA DE UPLOAD ---
+with st.expander("⬆️ CLIQUE AQUI PARA ATUALIZAR A PLANILHA"):
+    new_file = st.file_uploader("Selecione o novo Excel", type=["xlsx"])
     if st.button("SALVAR NO SISTEMA"):
         if new_file:
-            content = new_file.getvalue()
             try:
-                # Tenta atualizar o arquivo existente
-                contents = repo.get_contents(FILE_NAME)
-                repo.update_file(contents.path, "Atualizando estoque", content, contents.sha)
-                st.success("Salvo com sucesso! Agora todos os celulares verão este arquivo.")
-                st.cache_data.clear() # Limpa o cache para ler o novo
-            except:
-                # Se o arquivo não existir, cria um novo
-                repo.create_file(FILE_NAME, "Criando estoque inicial", content)
-                st.success("Arquivo criado com sucesso!")
+                content = new_file.getvalue()
+                try:
+                    contents = repo.get_contents(FILE_NAME)
+                    repo.update_file(contents.path, "Update", content, contents.sha)
+                except:
+                    repo.create_file(FILE_NAME, "Initial", content)
+                st.success("✅ Salvo! Agora todos os aparelhos podem consultar.")
+                st.cache_data.clear()
+            except Exception as e:
+                st.error(f"Erro ao salvar no GitHub: {e}")
 
-# --- PARTE 2: LEITURA E PESQUISA ---
-@st.cache_data(ttl=300)
+# --- AREA DE PESQUISA ---
+@st.cache_data(ttl=60)
 def load_data():
     try:
         file_content = repo.get_contents(FILE_NAME)
@@ -59,15 +61,10 @@ if st.button("PESQUISAR"):
         if not res.empty:
             row = res.iloc[0]
             st.markdown("---")
-            st.write(f"**Placa:** {row['Placa']}")
-            st.write(f"**Modelo:** {row['Modelo']}")
-            st.write(f"**Cor:** {row['Cor']}")
-            st.write(f"**Ano:** {row['Ano']}")
-            st.write(f"**KM:** {row['KM']}")
-            st.write(f"**Valor FIPE:** {row['Valor FIPE']}")
-            st.write(f"**Valor:** {row['VALOR']}")
-            st.write(f"**Margem:** {row['MARGEM']}")
+            for col in ['Placa', 'Modelo', 'Cor', 'Ano', 'KM', 'Valor FIPE', 'VALOR', 'MARGEM']:
+                if col in df.columns:
+                    st.write(f"**{col}:** {row[col]}")
         else:
             st.error("Placa não encontrada.")
     else:
-        st.warning("Nenhum dado salvo. Por favor, faça o primeiro upload acima.")
+        st.warning("O sistema ainda está vazio. Faça o primeiro upload no botão acima.")
