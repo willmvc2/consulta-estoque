@@ -1,70 +1,70 @@
 import streamlit as st
 import pandas as pd
-from github import Github
-import io
 
-# Tenta pegar as chaves de segurança
-try:
-    TOKEN = st.secrets["github_token"]
-    REPO_NAME = st.secrets["repo_name"]
-    FILE_NAME = "estoque.xlsx"
-    g = Github(TOKEN)
-    repo = g.get_repo(REPO_NAME)
-except Exception as e:
-    st.error(f"Erro de Configuração: Verifique os 'Secrets' no Streamlit. {e}")
-    st.stop()
+# Configuração da página
+st.set_page_config(page_title="Consulta de Estoque", page_icon="🚗")
 
-st.set_page_config(page_title="Sistema de Estoque", page_icon="🚗")
-
-# Estilização
-st.markdown("""<style>.stApp { background-color: #2b59b4; color: white; } .stButton>button { background-color: #f1d064; color: #1e3d7d; font-weight: bold; }</style>""", unsafe_allow_html=True)
+# Estilização Visual
+st.markdown("""
+    <style>
+    .stApp { background-color: #2b59b4; color: white; }
+    .stButton>button { 
+        background-color: #f1d064; 
+        color: #1e3d7d; 
+        font-weight: bold; 
+        border-radius: 5px; 
+        width: 100%; 
+    }
+    h1, h3 { color: white; }
+    label { color: white !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🚗 Consulta de Estoque")
 
-# --- AREA DE UPLOAD ---
-with st.expander("⬆️ CLIQUE AQUI PARA ATUALIZAR A PLANILHA"):
-    new_file = st.file_uploader("Selecione o novo Excel", type=["xlsx"])
-    if st.button("SALVAR NO SISTEMA"):
-        if new_file:
-            try:
-                content = new_file.getvalue()
-                try:
-                    contents = repo.get_contents(FILE_NAME)
-                    repo.update_file(contents.path, "Update", content, contents.sha)
-                except:
-                    repo.create_file(FILE_NAME, "Initial", content)
-                st.success("✅ Salvo! Agora todos os aparelhos podem consultar.")
-                st.cache_data.clear()
-            except Exception as e:
-                st.error(f"Erro ao salvar no GitHub: {e}")
+# 1. Área de Upload (Fica discreta)
+uploaded_file = st.file_uploader("Selecione a planilha", type=["xlsx"], label_visibility="collapsed")
 
-# --- AREA DE PESQUISA ---
-@st.cache_data(ttl=60)
-def load_data():
-    try:
-        file_content = repo.get_contents(FILE_NAME)
-        return pd.read_excel(io.BytesIO(file_content.decoded_content))
-    except:
-        return None
-
-df = load_data()
-
+# 2. Campo de Pesquisa
 st.subheader("DIGITE A PLACA")
-placa_input = st.text_input("", "").upper().strip()
+placa_input = st.text_input("Ex: ABC1D23", "").upper().strip()
 
+# Botão de Pesquisa
 if st.button("PESQUISAR"):
-    if df is not None:
-        df.columns = df.columns.str.strip()
-        df['Placa'] = df['Placa'].astype(str).str.strip().str.upper()
-        res = df[df['Placa'] == placa_input]
-        
-        if not res.empty:
-            row = res.iloc[0]
-            st.markdown("---")
-            for col in ['Placa', 'Modelo', 'Cor', 'Ano', 'KM', 'Valor FIPE', 'VALOR', 'MARGEM']:
-                if col in df.columns:
-                    st.write(f"**{col}:** {row[col]}")
-        else:
-            st.error("Placa não encontrada.")
+    if uploaded_file is not None:
+        try:
+            # Carrega a planilha
+            df = pd.read_excel(uploaded_file)
+            
+            # Limpa nomes de colunas (tira espaços extras)
+            df.columns = df.columns.str.strip()
+            
+            # Converte a coluna Placa para texto e busca
+            df['Placa'] = df['Placa'].astype(str).str.strip().str.upper()
+            resultado = df[df['Placa'] == placa_input]
+
+            if not resultado.empty:
+                row = resultado.iloc[0]
+                
+                st.markdown("---")
+                # Exibição dos dados um embaixo do outro
+                st.write(f"**Placa:** {row['Placa']}")
+                st.write(f"**Modelo:** {row['Modelo']}")
+                st.write(f"**Cor:** {row['Cor']}")
+                st.write(f"**Ano:** {row['Ano']}")
+                st.write(f"**KM:** {row['KM']}")
+                
+                # Formatação de valores (se for número, coloca R$. Se for texto, exibe direto)
+                fipe = row['Valor FIPE']
+                st.write(f"**Valor FIPE:** R$ {fipe:,.2f}" if isinstance(fipe, (int, float)) else f"**Valor FIPE:** {fipe}")
+                
+                valor = row['VALOR']
+                st.write(f"**Valor:** R$ {valor:,.2f}" if isinstance(valor, (int, float)) else f"**Valor:** {valor}")
+                
+                st.write(f"**Margem:** {row['MARGEM']}")
+            else:
+                st.error("Placa não encontrada.")
+        except Exception as e:
+            st.error(f"Erro ao ler planilha: Verifique se as colunas estão corretas.")
     else:
-        st.warning("O sistema ainda está vazio. Faça o primeiro upload no botão acima.")
+        st.warning("Por favor, faça o upload do arquivo Excel primeiro.")
