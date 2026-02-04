@@ -27,9 +27,6 @@ label { color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==============================
-# TÍTULO
-# ==============================
 st.title("🚗 Estoque Unidas")
 
 # ==============================
@@ -49,36 +46,37 @@ def carregar_estoque():
     return None
 
 # ==============================
-# LOGIN ADMIN (INVISÍVEL PARA USUÁRIO)
+# CONTROLE ADMIN (LINK SECRETO)
 # ==============================
+query_params = st.experimental_get_query_params()
+modo_admin = query_params.get("admin", ["0"])[0] == "1"
+
 if "admin_logado" not in st.session_state:
     st.session_state.admin_logado = False
 
-# Botão discreto no rodapé (somente quem sabe clica)
-with st.sidebar:
-    if not st.session_state.admin_logado:
-        with st.expander("🔐 Login Administrador"):
-            email = st.text_input("Email")
-            senha = st.text_input("Senha", type="password")
+# ==============================
+# LOGIN ADMIN (SÓ SE URL TIVER ?admin=1)
+# ==============================
+if modo_admin and not st.session_state.admin_logado:
+    st.subheader("🔐 Login Administrador")
 
-            if st.button("Entrar"):
-                if (
-                    email == st.secrets["ADMIN_EMAIL"]
-                    and senha == st.secrets["ADMIN_SENHA"]
-                ):
-                    st.session_state.admin_logado = True
-                    st.success("Login realizado")
-                else:
-                    st.error("Credenciais inválidas")
-    else:
-        st.success("Administrador logado")
-        if st.button("Sair"):
-            st.session_state.admin_logado = False
+    email = st.text_input("Email")
+    senha = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        if (
+            email == st.secrets["ADMIN_EMAIL"]
+            and senha == st.secrets["ADMIN_SENHA"]
+        ):
+            st.session_state.admin_logado = True
+            st.success("Login realizado com sucesso")
+        else:
+            st.error("Email ou senha inválidos")
 
 # ==============================
-# ÁREA ADMIN (SÓ APARECE SE LOGADO)
+# ÁREA ADMIN (SÓ SE LOGADO)
 # ==============================
-if st.session_state.admin_logado:
+if modo_admin and st.session_state.admin_logado:
     st.subheader("📤 Atualizar Estoque")
 
     arquivo = st.file_uploader(
@@ -91,10 +89,13 @@ if st.session_state.admin_logado:
         df.to_excel(ARQUIVO_ESTOQUE, index=False)
         st.success("Estoque atualizado com sucesso")
 
+    if st.button("Sair"):
+        st.session_state.admin_logado = False
+
 st.markdown("---")
 
 # ==============================
-# CONSULTA PÚBLICA
+# CONSULTA PÚBLICA (SEMPRE VISÍVEL)
 # ==============================
 st.subheader("🔎 Consultar veículo por placa")
 
