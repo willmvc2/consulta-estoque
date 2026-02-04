@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 
 # ==============================
 # CONFIGURAÇÃO DA PÁGINA
@@ -11,21 +12,17 @@ st.set_page_config(
 )
 
 # ==============================
-# ESTILO VISUAL
+# ESTILO
 # ==============================
 st.markdown("""
 <style>
-.stApp {
-    background-color: #1f3c88;
-}
-h1, h2, h3, label {
-    color: white;
-}
+.stApp { background-color: #1f3c88; color: white; }
+h1, h2, h3 { color: white; }
+label { color: white !important; }
 .stButton>button {
     background-color: #f1d064;
     color: #1f3c88;
     font-weight: bold;
-    border-radius: 8px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -33,101 +30,94 @@ h1, h2, h3, label {
 # ==============================
 # TÍTULO
 # ==============================
-st.markdown("## 🚗 Estoque Unidas")
+st.title("🚗 Estoque Unidas")
 
 # ==============================
-# INICIALIZA SESSION STATE
+# VARIÁVEIS
+# ==============================
+ARQUIVO_ESTOQUE = "estoque.xlsx"
+
+# ==============================
+# FUNÇÕES
+# ==============================
+def carregar_estoque():
+    if os.path.exists(ARQUIVO_ESTOQUE):
+        df = pd.read_excel(ARQUIVO_ESTOQUE)
+        df.columns = df.columns.str.strip()
+        df["Placa"] = df["Placa"].astype(str).str.upper().str.strip()
+        return df
+    return None
+
+# ==============================
+# LOGIN ADMIN (INVISÍVEL PARA USUÁRIO)
 # ==============================
 if "admin_logado" not in st.session_state:
     st.session_state.admin_logado = False
 
-if "df" not in st.session_state:
-    st.session_state.df = None
-
-# ==============================
-# ÁREA DO ADMIN (SÓ SE LOGAR)
-# ==============================
-with st.expander("🔒 Área do Administrador"):
-
+# Botão discreto no rodapé (somente quem sabe clica)
+with st.sidebar:
     if not st.session_state.admin_logado:
-        email = st.text_input("Email do administrador")
-        senha = st.text_input("Senha", type="password")
+        with st.expander("🔐 Login Administrador"):
+            email = st.text_input("Email")
+            senha = st.text_input("Senha", type="password")
 
-        if st.button("Entrar como Admin"):
-            if (
-                email == st.secrets["ADMIN_EMAIL"]
-                and senha == st.secrets["ADMIN_SENHA"]
-            ):
-                st.session_state.admin_logado = True
-                st.success("Administrador logado com sucesso!")
-                st.rerun()
-            else:
-                st.error("Email ou senha incorretos")
-
+            if st.button("Entrar"):
+                if (
+                    email == st.secrets["ADMIN_EMAIL"]
+                    and senha == st.secrets["ADMIN_SENHA"]
+                ):
+                    st.session_state.admin_logado = True
+                    st.success("Login realizado")
+                else:
+                    st.error("Credenciais inválidas")
     else:
-        st.success("Você está logado como ADMIN")
-
-        uploaded_file = st.file_uploader(
-            "📤 Enviar planilha Excel",
-            type=["xlsx"]
-        )
-
-        if uploaded_file is not None:
-            try:
-                df = pd.read_excel(uploaded_file)
-                df.columns = df.columns.str.strip()
-                df["Placa"] = df["Placa"].astype(str).str.upper().str.strip()
-
-                st.session_state.df = df
-                st.success("Planilha carregada com sucesso!")
-
-            except Exception:
-                st.error("Erro ao ler a planilha. Verifique o formato.")
-
-        if st.button("Sair do Admin"):
+        st.success("Administrador logado")
+        if st.button("Sair"):
             st.session_state.admin_logado = False
-            st.rerun()
 
 # ==============================
-# ÁREA DO USUÁRIO (SEM LOGIN)
+# ÁREA ADMIN (SÓ APARECE SE LOGADO)
 # ==============================
+if st.session_state.admin_logado:
+    st.subheader("📤 Atualizar Estoque")
+
+    arquivo = st.file_uploader(
+        "Enviar planilha Excel",
+        type=["xlsx"]
+    )
+
+    if arquivo:
+        df = pd.read_excel(arquivo)
+        df.to_excel(ARQUIVO_ESTOQUE, index=False)
+        st.success("Estoque atualizado com sucesso")
+
 st.markdown("---")
-st.markdown("### 🔎 Consultar veículo por placa")
 
-placa = st.text_input(
-    "Digite a placa (ex: ABC1D23)",
-    "").upper().strip()
+# ==============================
+# CONSULTA PÚBLICA
+# ==============================
+st.subheader("🔎 Consultar veículo por placa")
 
-if st.button("Pesquisar"):
-    if st.session_state.df is None:
-        st.warning("Nenhuma planilha carregada pelo administrador.")
+placa = st.text_input("Digite a placa (ex: ABC1D23)").upper().strip()
+
+if st.button("PESQUISAR"):
+    df = carregar_estoque()
+
+    if df is None:
+        st.error("Estoque ainda não cadastrado.")
     else:
-        resultado = st.session_state.df[
-            st.session_state.df["Placa"] == placa
-        ]
+        resultado = df[df["Placa"] == placa]
 
         if resultado.empty:
-            st.error("Placa não encontrada.")
+            st.warning("Placa não encontrada.")
         else:
-            row = resultado.iloc[0]
-
-            st.markdown("---")
-            st.write(f"**Placa:** {row['Placa']}")
-            st.write(f"**Modelo:** {row['Modelo']}")
-            st.write(f"**Cor:** {row['Cor']}")
-            st.write(f"**Ano:** {row['Ano']}")
-            st.write(f"**KM:** {row['KM']}")
-
-            st.write(
-                f"**Valor FIPE:** R$ {row['Valor FIPE']:,.2f}"
-                if isinstance(row["Valor FIPE"], (int, float))
-                else f"**Valor FIPE:** {row['Valor FIPE']}"
-            )
-
-            st.write(
-                f"**Valor:** R$ {row['VALOR']:,.2f}"
-                if isinstance(row["VALOR"], (int, float))
-                else f"**Valor:** {row['VALOR']}"
-            )
-
-            st.write(f"**Margem:** {row['MARGEM']}")
+            r = resultado.iloc[0]
+            st.success("Veículo encontrado")
+            st.write(f"**Placa:** {r['Placa']}")
+            st.write(f"**Modelo:** {r['Modelo']}")
+            st.write(f"**Cor:** {r['Cor']}")
+            st.write(f"**Ano:** {r['Ano']}")
+            st.write(f"**KM:** {r['KM']}")
+            st.write(f"**Valor FIPE:** R$ {r['Valor FIPE']:,.2f}")
+            st.write(f"**Valor:** R$ {r['VALOR']:,.2f}")
+            st.write(f"**Margem:** {r['MARGEM']}")
